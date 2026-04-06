@@ -17,8 +17,8 @@ router.get('/google', passport.authenticate('google', { scope: ['profile', 'emai
 router.get('/google/callback', passport.authenticate('google', { failureRedirect: '/' }), authController.googleCallback);
 
 // Complete Google Profile (Locked for authed users)
-const { verifyToken } = require('../middleware/authMiddleware');
-router.put('/complete-google-profile', verifyToken, authController.completeGoogleProfile);
+const { authenticateToken } = require('../middleware/authMiddleware');
+router.put('/complete-google-profile', authenticateToken, authController.completeGoogleProfile);
 
 // Public route to validate ID (costa rica)
 router.get('/validate-cedula/:cedula', authController.validateCedulaEndpoint);
