@@ -110,3 +110,29 @@ exports.getMyConversations = async (req, res) => {
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 };
+
+// GET unread message count (conversations where last message is not from current user)
+exports.getUnreadCount = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const conversations = await Conversation.find({
+            $or: [{ buyerId: userId }, { sellerId: userId }]
+        });
+
+        const unreadCount = conversations.reduce((count, conv) => {
+            if (conv.messages.length > 0) {
+                const lastMessage = conv.messages[conv.messages.length - 1];
+                if (lastMessage.senderId.toString() !== userId) {
+                    return count + 1;
+                }
+            }
+            return count;
+        }, 0);
+
+        res.json({ unreadCount });
+    } catch (error) {
+        console.error('Error getting unread count:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+};
