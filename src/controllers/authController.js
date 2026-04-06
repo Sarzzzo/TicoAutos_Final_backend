@@ -86,13 +86,19 @@ async function fetchCedulaData(cedula) {
 exports.validateCedulaEndpoint = async (req, res) => {
     const { cedula } = req.params;
     const data = await fetchCedulaData(cedula);
+    
     if (!data) {
         return res.status(404).json({ message: 'No encontrado' });
     }
+
+    // Check if it was a bypass (Hacienda 404)
+    const isManual = data.nombre === "Usuario" && data.primerApellido === "Tico";
+
     res.json({
         nombre: data.nombre,
         primerApellido: data.primerApellido,
-        segundoApellido: data.segundoApellido
+        segundoApellido: data.segundoApellido,
+        manual: isManual
     });
 };
 
