@@ -12,4 +12,7 @@ router.get('/vehicle/:vehicleId', authenticateToken, chatController.getOrCreateC
 // POST a message to a conversation (alternating turns)
 router.post('/:conversationId/message', authenticateToken, chatController.sendMessage);
 
+// GET unread count
+router.get('/unread-count', authenticateToken, chatController.getUnreadCount);
+
 module.exports = router;
