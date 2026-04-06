@@ -41,8 +41,8 @@ exports.register = async (req, res) => {
             email,
             passwordHash,
             cedula,
-            firstName: cedulaData.nombre,
-            lastName: `${cedulaData.primerApellido} ${cedulaData.segundoApellido}`,
+            firstName: req.body.firstName || cedulaData.nombre,
+            lastName: req.body.lastName || `${cedulaData.primerApellido} ${cedulaData.segundoApellido}`,
             role: role || 'buyer'
         });
 
@@ -57,22 +57,30 @@ exports.register = async (req, res) => {
 // Helper function to fetch data from Hacienda API
 async function fetchCedulaData(cedula) {
     try {
-        const response = await fetch(`https://api.hacienda.go.cr/fe/padron?identificacion=${cedula}`);
+        // Option 1: Try the AE (Actividad Economica) endpoint first, it's more modern
+        let response = await fetch(`https://api.hacienda.go.cr/fe/ae?identificacion=${cedula}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+        });
+
+        if (response.status !== 200) {
+            // Option 2: Fallback to the old padron endpoint
+            response = await fetch(`https://api.hacienda.go.cr/fe/padron?identificacion=${cedula}`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+            });
+        }
+
         if (!response.ok && response.status !== 404) return null;
+        
         const data = await response.json();
+        
         if (response.status === 200) {
             return data;
         }
         
-        // If not found in Hacienda (404), maybe it's not a taxpayer but still a valid person.
-        // For development/demo purposes, we can allow it if the ID looks like a standard CR ID (9 digits).
+        // If 404, check if we should allow manual entry (development bypass)
         if (response.status === 404 && /^\d{9}$/.test(cedula)) {
-            console.log(`Cedula ${cedula} not found in Hacienda, using placeholder for demo.`);
-            return {
-                nombre: "Usuario",
-                primerApellido: "Tico",
-                segundoApellido: "Autos"
-            };
+            console.log(`Cedula ${cedula} not found in any Hacienda endpoint, allowing manual entry.`);
+            return { nombre: "", primerApellido: "", segundoApellido: "", manual: true };
         }
         
         return null;
@@ -91,14 +99,11 @@ exports.validateCedulaEndpoint = async (req, res) => {
         return res.status(404).json({ message: 'No encontrado' });
     }
 
-    // Check if it was a bypass (Hacienda 404)
-    const isManual = data.nombre === "Usuario" && data.primerApellido === "Tico";
-
     res.json({
         nombre: data.nombre,
         primerApellido: data.primerApellido,
         segundoApellido: data.segundoApellido,
-        manual: isManual
+        manual: data.manual || false
     });
 };
 
