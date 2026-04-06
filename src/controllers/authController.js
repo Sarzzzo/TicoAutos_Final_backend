@@ -12,41 +12,76 @@ const jwt = require("jsonwebtoken");
 // BUSINESS LOGIC TO REGISTER A NEW USER
 exports.register = async (req, res) => {
     try {
-        const { username, email, password, role } = req.body; // role may come from client, optional
+        const { username, email, password, role, cedula } = req.body;
 
         // basic validation
-        if (!username || !email || !password) {
-            return res.status(400).json({ message: 'Username, email and password are required' });
+        if (!username || !email || !password || !cedula) {
+            return res.status(400).json({ message: 'Username, email, password and cedula are required' });
         }
 
-        // 1. Check if the user already exists
-        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+        // 1. Check if the user already exists (including cedula)
+        const existingUser = await User.findOne({ $or: [{ email }, { username }, { cedula }] });
         if (existingUser) {
-            return res.status(400).json({ message: 'User already exists' });
+            return res.status(400).json({ message: 'User with this username, email or cedula already exists' });
         }
 
-        // 2. Hash the password correctly
-        const salt = await bycryptjs.genSalt(10); // generate a proper salt
+        // 2. Validate Cedula with external API
+        const cedulaData = await fetchCedulaData(cedula);
+        if (!cedulaData) {
+            return res.status(400).json({ message: 'Cedula invalida o no encontrada en el padron' });
+        }
+
+        // 3. Hash the password
+        const salt = await bycryptjs.genSalt(10);
         const passwordHash = await bycryptjs.hash(password, salt);
 
-        // 3. Create the user
+        // 4. Create the user
         const newUser = new User({
             username,
             email,
             passwordHash,
-            role: role || 'buyer' // default to buyer if none provided
+            cedula,
+            firstName: cedulaData.nombre,
+            lastName: `${cedulaData.primerApellido} ${cedulaData.segundoApellido}`,
+            role: role || 'buyer'
         });
 
-        // 4. Save the user
         await newUser.save();
-
-        // Results, if everything goes well
         return res.status(201).json({ message: 'User created successfully' });
     } catch (error) {
-        // Results, if something goes wrong
         console.error('Error creating user:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
+};
+
+// Helper function to fetch data from Hacienda API
+async function fetchCedulaData(cedula) {
+    try {
+        const response = await fetch(`https://api.hacienda.go.cr/fe/padron?persona=${cedula}`);
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (data && data.nombre) {
+            return data;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching cedula data:', error);
+        return null;
+    }
+}
+
+// Endpoint for frontend to validate and autocomplete
+exports.validateCedulaEndpoint = async (req, res) => {
+    const { cedula } = req.params;
+    const data = await fetchCedulaData(cedula);
+    if (!data) {
+        return res.status(404).json({ message: 'No encontrado' });
+    }
+    res.json({
+        nombre: data.nombre,
+        primerApellido: data.primerApellido,
+        segundoApellido: data.segundoApellido
+    });
 };
 
 // ====================================================================================
@@ -86,7 +121,6 @@ exports.login = async (req, res) => {
         // We create the token synchronously
         const generatedToken = jwt.sign(payload, secretKey, tokenConfig);
 
-        // We return the response
         return res.status(200).json({
             token: generatedToken,
             role: user.role
@@ -94,6 +128,57 @@ exports.login = async (req, res) => {
     } catch (error) {
         console.error('Error logging in:', error);
         return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// Google OAuth Callback Handler
+exports.googleCallback = async (req, res) => {
+    try {
+        const user = req.user;
+        const payload = {
+            user: {
+                id: user._id,
+                role: user.role,
+            }
+        };
+        const generatedToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '10h' });
+
+        // Redirect to frontend with token and status
+        // The frontend will handle the 'Pending' status by asking for the cedula
+        res.redirect(`http://localhost:3000/index.html?token=${generatedToken}&status=${user.status}`);
+    } catch (error) {
+        console.error('Error in googleCallback:', error);
+        res.redirect('http://localhost:3000/index.html?error=google_auth_failed');
+    }
+};
+
+// Complete Profile for Google Users
+exports.completeGoogleProfile = async (req, res) => {
+    try {
+        const { cedula } = req.body;
+        const userId = req.user.id;
+
+        if (!cedula) return res.status(400).json({ message: 'Cedula is required' });
+
+        // Validate Cedula
+        const cedulaData = await fetchCedulaData(cedula);
+        if (!cedulaData) return res.status(400).json({ message: 'Cedula invalida' });
+
+        // Check if cedula already exists
+        const existing = await User.findOne({ cedula });
+        if (existing) return res.status(400).json({ message: 'Esta cedula ya esta registrada' });
+
+        await User.findByIdAndUpdate(userId, {
+            cedula,
+            firstName: cedulaData.nombre,
+            lastName: `${cedulaData.primerApellido} ${cedulaData.segundoApellido}`,
+            status: 'Active'
+        });
+
+        res.json({ message: 'Perfil completado con exito' });
+    } catch (error) {
+        console.error('Error completing profile:', error);
+        res.status(500).json({ message: 'Server error' });
     }
 };
 
