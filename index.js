@@ -3,6 +3,8 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const path = require("path");
+const session = require('express-session');
+const passport = require('./src/config/passport');
 
 const app = express();
 
@@ -14,6 +16,15 @@ app.use(cors({
 
 // Middleware: the server can understand JSON format, from frontend to backend
 app.use(express.json());
+
+// Session and Passport
+app.use(session({
+    secret: process.env.JWT_SECRET || 'secret',
+    resave: false,
+    saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Routes of the application
 app.use("/api/auth", require("./src/routes/authRoutes"));
