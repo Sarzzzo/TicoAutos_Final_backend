@@ -27,8 +27,15 @@ exports.register = async (req, res) => {
 
         // 2. Validate Cedula with external API
         const cedulaData = await fetchCedulaData(cedula);
-        if (!cedulaData) {
-            return res.status(400).json({ message: 'Cedula invalida o no encontrada en el padron' });
+        
+        // If API fails, we still allow registration but require names to be provided
+        if (!cedulaData && (!req.body.firstName || !req.body.lastName)) {
+            return res.status(400).json({ message: 'No se pudo validar la cédula automáticamente. Por favor ingresa tus datos manualmente.' });
+        }
+
+        // Fulfill requirement: age validation (only if we have API data)
+        if (cedulaData && !cedulaData.esMayor) {
+            return res.status(400).json({ message: `Debes ser mayor de edad para registrarte. Edad actual: ${cedulaData.edad} años.` });
         }
 
         // 3. Hash the password
@@ -57,32 +64,35 @@ exports.register = async (req, res) => {
 // Helper function to fetch data from Hacienda API
 async function fetchCedulaData(cedula) {
     try {
-        // Option 1: Try the AE (Actividad Economica) endpoint first, it's more modern
-        let response = await fetch(`https://api.hacienda.go.cr/fe/ae?identificacion=${cedula}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-        });
-
-        if (response.status !== 200) {
-            // Option 2: Fallback to the old padron endpoint
-            response = await fetch(`https://api.hacienda.go.cr/fe/padron?identificacion=${cedula}`, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
-            });
-        }
-
-        if (!response.ok && response.status !== 404) return null;
-        
+        const response = await fetch(`https://registrocivil.uca.ac.cr/api/consulta_cedula/${cedula}`);
+        if (!response.ok) return null;
         const data = await response.json();
         
-        if (response.status === 200) {
-            return data;
+        if (data && data.nombre) {
+            // Calculate age from fecha_suceso (YYYYMMDD)
+            const birthStr = data.fecha_suceso;
+            if (!birthStr || birthStr.length !== 8) return null;
+
+            const year = parseInt(birthStr.substring(0, 4));
+            const month = parseInt(birthStr.substring(4, 6)) - 1;
+            const day = parseInt(birthStr.substring(6, 8));
+            const birthDate = new Date(year, month, day);
+            const today = new Date();
+            
+            let age = today.getFullYear() - birthDate.getFullYear();
+            const m = today.getMonth() - birthDate.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                age--;
+            }
+
+            return {
+                nombre: data.nombre,
+                primerApellido: data.primer_apellido,
+                segundoApellido: data.segundo_apellido,
+                edad: age,
+                esMayor: age >= 18
+            };
         }
-        
-        // If 404, check if we should allow manual entry (development bypass)
-        if (response.status === 404 && /^\d{9}$/.test(cedula)) {
-            console.log(`Cedula ${cedula} not found in any Hacienda endpoint, allowing manual entry.`);
-            return { nombre: "", primerApellido: "", segundoApellido: "", manual: true };
-        }
-        
         return null;
     } catch (error) {
         console.error('Error fetching cedula data:', error);
@@ -96,14 +106,15 @@ exports.validateCedulaEndpoint = async (req, res) => {
     const data = await fetchCedulaData(cedula);
     
     if (!data) {
-        return res.status(404).json({ message: 'No encontrado' });
+        return res.status(404).json({ message: 'Cédula no encontrada' });
     }
 
     res.json({
         nombre: data.nombre,
         primerApellido: data.primerApellido,
         segundoApellido: data.segundoApellido,
-        manual: data.manual || false
+        edad: data.edad,
+        esMayor: data.esMayor
     });
 };
 
@@ -183,20 +194,33 @@ exports.completeGoogleProfile = async (req, res) => {
 
         if (!cedula) return res.status(400).json({ message: 'Cedula is required' });
 
-        // Validate Cedula
+        // Validate Cedula - Optional fallback
         const cedulaData = await fetchCedulaData(cedula);
-        if (!cedulaData) return res.status(400).json({ message: 'Cedula invalida' });
-
+        
+        // If API fails, we might still allow it if we had names, but Google users usually just provide cedula here.
+        // For simplicity, we'll allow it but use placeholders if we can't find names and none were provided.
+        // Actually, let's keep it consistent: if API fails, they need to provide names (or we use existing ones).
+        
         // Check if cedula already exists
         const existing = await User.findOne({ cedula });
         if (existing) return res.status(400).json({ message: 'Esta cedula ya esta registrada' });
 
-        await User.findByIdAndUpdate(userId, {
+        const updateData = {
             cedula,
-            firstName: cedulaData.nombre,
-            lastName: `${cedulaData.primerApellido} ${cedulaData.segundoApellido}`,
             status: 'Active'
-        });
+        };
+
+        if (cedulaData) {
+            updateData.firstName = cedulaData.nombre;
+            updateData.lastName = `${cedulaData.primerApellido} ${cedulaData.segundoApellido}`;
+        } else if (req.body.firstName && req.body.lastName) {
+            updateData.firstName = req.body.firstName;
+            updateData.lastName = req.body.lastName;
+        } else {
+            return res.status(400).json({ message: 'No se pudo validar la cédula automáticamente. Por favor ingresa tus datos manualmente.' });
+        }
+
+        await User.findByIdAndUpdate(userId, updateData);
 
         res.json({ message: 'Perfil completado con exito' });
     } catch (error) {
