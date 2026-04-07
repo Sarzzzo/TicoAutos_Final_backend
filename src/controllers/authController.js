@@ -42,14 +42,13 @@ exports.register = async (req, res) => {
         const salt = await bycryptjs.genSalt(10);
         const passwordHash = await bycryptjs.hash(password, salt);
 
-        // 4. Create the user
         const newUser = new User({
             username,
             email,
             passwordHash,
             cedula,
-            firstName: req.body.firstName || cedulaData.nombre,
-            lastName: req.body.lastName || `${cedulaData.primerApellido} ${cedulaData.segundoApellido}`,
+            firstName: req.body.firstName || (cedulaData ? cedulaData.nombre : ''),
+            lastName: req.body.lastName || (cedulaData ? `${cedulaData.primerApellido} ${cedulaData.segundoApellido}` : ''),
             role: role || 'buyer'
         });
 
