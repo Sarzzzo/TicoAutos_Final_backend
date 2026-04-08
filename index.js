@@ -27,8 +27,13 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Routes of the application
-app.use("/api/auth", require("./src/routes/authRoutes"));
-app.use("/api/vehicles", require("./src/routes/vehicleRoutes"));
+const authRoutes = require("./src/routes/authRoutes");
+const cedulaRoutes = require("./src/routes/cedulaRoutes");
+const vehicleRoutes = require("./src/routes/vehicleRoutes");
+
+app.use("/api/auth", authRoutes);
+app.use("/api/cedula", cedulaRoutes);
+app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/qa", require("./src/routes/qaRoutes"));
 app.use("/api/chat", require("./src/routes/chatRoutes"));
 
