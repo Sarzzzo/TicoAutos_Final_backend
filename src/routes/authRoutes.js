@@ -20,8 +20,5 @@ router.get('/google/callback', passport.authenticate('google', { failureRedirect
 const { authenticateToken } = require('../middleware/authMiddleware');
 router.put('/complete-google-profile', authenticateToken, authController.completeGoogleProfile);
 
-// Public route to validate ID (costa rica)
-router.get('/validate-cedula/:cedula', authController.validateCedulaEndpoint);
-
 // ===================================================================
 module.exports = router;

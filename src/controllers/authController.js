@@ -60,36 +60,20 @@ exports.register = async (req, res) => {
     }
 };
 
-// Helper function to fetch data from Hacienda API
+const { searchByCedula } = require("../services/cedulaService");
+
+// Helper function to fetch data from Local Database (Padron)
 async function fetchCedulaData(cedula) {
     try {
-        const response = await fetch(`https://registrocivil.uca.ac.cr/api/consulta_cedula/${cedula}`);
-        if (!response.ok) return null;
-        const data = await response.json();
+        const data = await searchByCedula(cedula);
         
-        if (data && data.nombre) {
-            // Calculate age from fecha_suceso (YYYYMMDD)
-            const birthStr = data.fecha_suceso;
-            if (!birthStr || birthStr.length !== 8) return null;
-
-            const year = parseInt(birthStr.substring(0, 4));
-            const month = parseInt(birthStr.substring(4, 6)) - 1;
-            const day = parseInt(birthStr.substring(6, 8));
-            const birthDate = new Date(year, month, day);
-            const today = new Date();
-            
-            let age = today.getFullYear() - birthDate.getFullYear();
-            const m = today.getMonth() - birthDate.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-                age--;
-            }
-
+        if (data) {
             return {
                 nombre: data.nombre,
-                primerApellido: data.primer_apellido,
-                segundoApellido: data.segundo_apellido,
-                edad: age,
-                esMayor: age >= 18
+                primerApellido: data.primerApellido,
+                segundoApellido: data.segundoApellido,
+                edad: 18, // Padrón only contains 18+ individuals
+                esMayor: true
             };
         }
         return null;
