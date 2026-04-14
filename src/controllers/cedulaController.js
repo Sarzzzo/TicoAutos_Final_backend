@@ -5,9 +5,13 @@ const { searchByCedula } = require("../services/cedulaService");
  */
 exports.validateCedula = async (req, res) => {
     try {
-        const { cedula } = req.params;
-        if (!cedula || cedula.length !== 9) {
-            return res.status(400).json({ message: 'Número de cédula debe ser de 9 dígitos' });
+        let { cedula } = req.params;
+        
+        // Remove any dashes or spaces
+        cedula = cedula.replace(/\D/g, '');
+
+        if (!cedula || cedula.length < 7 || cedula.length > 12) {
+            return res.status(400).json({ message: 'Número de cédula inválido (formato incorrecto)' });
         }
 
         const data = await searchByCedula(cedula);
