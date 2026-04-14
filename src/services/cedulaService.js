@@ -6,7 +6,7 @@ dotenv.config();
 
 // Create a separate connection for the LOCAL Padrón database
 // This ensures we can store the full 3.5M records without Atlas limits
-const padronDbUrl = process.env.LOCAL_PADRON_URL || 'mongodb://localhost:27017/padron_electoral';
+const padronDbUrl = process.env.LOCAL_PADRON_URL || 'mongodb://localhost:27017/padron';
 
 const padronConn = mongoose.createConnection(padronDbUrl);
 const Padron = padronConn.model('Padron', PadronSchema);
