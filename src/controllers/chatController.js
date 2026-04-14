@@ -1,5 +1,6 @@
 const Conversation = require('../models/conversation');
 const Vehicle = require('../models/vehicle');
+const { containsContactInfo } = require('../services/aiService');
 
 // START or GET a conversation for a vehicle
 exports.getOrCreateConversation = async (req, res) => {
@@ -52,6 +53,15 @@ exports.sendMessage = async (req, res) => {
         const { conversationId } = req.params;
         const { content } = req.body;
         const senderId = req.user.id;
+
+        // --- NEW: AI Moderation Step ---
+        const isBlocked = await containsContactInfo(content);
+        if (isBlocked) {
+            return res.status(400).json({ 
+                message: 'Mensaje bloqueado: No está permitido compartir información de contacto personal (teléfonos, correos, etc.). Por favor negocia a través de la plataforma.',
+                isBlocked: true 
+            });
+        }
 
         const conversation = await Conversation.findById(conversationId);
         if (!conversation) {
