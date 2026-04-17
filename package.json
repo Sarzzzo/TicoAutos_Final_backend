@@ -19,6 +19,7 @@
         "express": "^5.2.1",
         "express-session": "^1.19.0",
         "graphql": "^16.13.2",
+        "graphql-tag": "^2.12.6",
         "jsonwebtoken": "^9.0.3",
         "mongoose": "^9.1.5",
         "multer": "^2.1.1",

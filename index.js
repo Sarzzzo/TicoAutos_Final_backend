@@ -31,43 +31,71 @@ const authRoutes = require("./src/routes/authRoutes");
 const cedulaRoutes = require("./src/routes/cedulaRoutes");
 const vehicleRoutes = require("./src/routes/vehicleRoutes");
 
-app.use("/api/auth", authRoutes);
-app.use("/api/cedula", cedulaRoutes);
-app.use("/api/vehicles", vehicleRoutes);
-app.use("/api/qa", require("./src/routes/qaRoutes"));
-app.use("/api/chat", require("./src/routes/chatRoutes"));
+// GraphQL Imports
+const { ApolloServer } = require('@apollo/server');
+const { expressMiddleware } = require('@as-integrations/express5');
+const typeDefs = require('./src/graphql/typeDefs');
+const resolvers = require('./src/graphql/resolvers');
+const jwt = require('jsonwebtoken');
 
-// Mongo Connection
-const mongoString = process.env.DATABASE_URL;
+async function startServer() {
+    // 1. Setup Apollo Server
+    const server = new ApolloServer({
+        typeDefs,
+        resolvers,
+        formatError: (error) => {
+            console.error('GraphQL Error:', error);
+            return error;
+        },
+    });
 
-mongoose.connect(mongoString);
-const database = mongoose.connection;
+    await server.start();
 
-database.on('error', (error) => {
-    console.log('Error MongoDB:', error);
+    // 2. Middleware for Apollo
+    app.use('/graphql', expressMiddleware(server, {
+        context: async ({ req }) => {
+            const authHeader = req.headers['authorization'];
+            const token = authHeader && authHeader.split(' ')[1];
+            if (!token) return { user: null };
+
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                return { user: decoded.user };
+            } catch (err) {
+                return { user: null };
+            }
+        },
+    }));
+
+    app.use("/api/auth", authRoutes);
+    app.use("/api/cedula", cedulaRoutes);
+    app.use("/api/vehicles", vehicleRoutes);
+    app.use("/api/qa", require("./src/routes/qaRoutes"));
+    app.use("/api/chat", require("./src/routes/chatRoutes"));
+
+    // Mongo Connection
+    const mongoString = process.env.DATABASE_URL;
+    mongoose.connect(mongoString);
+    const database = mongoose.connection;
+
+    database.once('connected', () => { console.log('Database Connected'); });
+
+    // Serve frontend files
+    app.use(express.static(path.join(__dirname, '../frontend/public')));
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+    app.use('/src', express.static(path.join(__dirname, '../frontend/src')));
+
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, '../frontend/public/index.html'));
+    });
+
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => { 
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`📊 GraphQL ready at http://localhost:${PORT}/graphql`);
+    });
+}
+
+startServer().catch(err => {
+    console.error('Error starting server:', err);
 });
-
-database.once('connected', () => {
-    console.log('Database Connected');
-});
-
-// this is the route to serve the frontend files
-// 1. we tell to express where is the public folder
-app.use(express.static(path.join(__dirname, '../frontend/public')));
-
-// Serve uploaded images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// 2. we tell to express that if the request is not for an API route, it should serve the index.html file
-app.use('/src', express.static(path.join(__dirname, '../frontend/src')));
-
-// 3. when someone tries to access the root route, it should serve the index.html file
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/public/index.html'));
-});
-
-// the port, if the environment variable PORT is not defined, it will use 3000
-const PORT = process.env.PORT || 3000; // this way is more secure 
-
-// lets start the server
-app.listen(PORT, () => { console.log(`Server running on port ${PORT}`); });
