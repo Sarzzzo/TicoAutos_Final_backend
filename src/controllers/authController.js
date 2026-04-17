@@ -272,41 +272,41 @@ exports.completeGoogleProfile = async (req, res) => {
         const { cedula, firstName, lastName, phoneNumber } = req.body;
         const userId = req.user.id;
 
-        if (!cedula || !phoneNumber) return res.status(400).json({ message: 'Cedula and Phone Number are required' });
+        if (!cedula) return res.status(400).json({ message: 'La cédula es obligatoria' });
 
-        // Validate Cedula - Optional fallback
+        // Validate Cedula with local database
         const cedulaData = await fetchCedulaData(cedula);
         
-        // If API fails, we might still allow it if we had names, but Google users usually just provide cedula here.
-        // For simplicity, we'll allow it but use placeholders if we can't find names and none were provided.
-        // Actually, let's keep it consistent: if API fails, they need to provide names (or we use existing ones).
-        
-        // Check if cedula already exists
-        const existing = await User.findOne({ cedula });
-        if (existing) return res.status(400).json({ message: 'Esta cedula ya esta registrada' });
+        // Check if cedula already exists on another user
+        const existing = await User.findOne({ cedula, _id: { $ne: userId } });
+        if (existing) return res.status(400).json({ message: 'Esta cédula ya está registrada por otro usuario' });
 
         const updateData = {
             cedula,
-            phoneNumber,
             status: 'Active'
         };
+
+        // Save phone if provided (optional for Google users)
+        if (phoneNumber) {
+            updateData.phoneNumber = phoneNumber;
+        }
 
         if (cedulaData) {
             updateData.firstName = cedulaData.nombre;
             updateData.lastName = `${cedulaData.primerApellido} ${cedulaData.segundoApellido}`;
-        } else if (req.body.firstName && req.body.lastName) {
-            updateData.firstName = req.body.firstName;
-            updateData.lastName = req.body.lastName;
+        } else if (firstName && lastName) {
+            updateData.firstName = firstName;
+            updateData.lastName = lastName;
         } else {
-            return res.status(400).json({ message: 'No se pudo validar la cédula automáticamente. Por favor ingresa tus datos manualmente.' });
+            return res.status(400).json({ message: 'Cédula no encontrada en el sistema local. Por favor, ingresa tus datos manualmente.' });
         }
 
         await User.findByIdAndUpdate(userId, updateData);
 
-        res.json({ message: 'Perfil completado con exito' });
+        res.json({ message: 'Perfil completado con éxito' });
     } catch (error) {
         console.error('Error completing profile:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ message: 'Error interno del servidor al completar perfil' });
     }
 };
 

@@ -8,8 +8,12 @@ const userSchema = new mongoose.Schema(
     firstName: { type: String },
     lastName: { type: String },
     cedula: { type: String, unique: true, sparse: true },
+    phoneNumber: { type: String }, // Required for 2FA (validated in controller for email/password users)
     googleId: { type: String, unique: true, sparse: true },
-    status: { type: String, enum: ["Pending", "Active"], default: "Active" }, // Defaulting to Active for now as per partial req
+    status: { type: String, enum: ["Pending", "Active"], default: "Pending" },
+    activationToken: { type: String },
+    twoFactorCode: { type: String },
+    twoFactorExpires: { type: Date },
     role: { type: String, enum: ["owner", "buyer"], default: "buyer" },
     vehicles: [{ type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" }],
   },
