@@ -3,8 +3,10 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+// Inicializamos el cliente de OpenAI pero apuntando a la URL de OpenRouter
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: process.env.OPENROUTER_API_KEY,
 });
 
 /**
@@ -15,7 +17,8 @@ const openai = new OpenAI({
 const containsContactInfo = async (text) => {
     try {
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini", // Efficient and good for this task
+            // Puedes usar modelos gratuitos de OpenRouter como Llama 3 o Gemini Flash
+            model: "meta-llama/llama-3-8b-instruct:free",
             messages: [
                 {
                     role: "system",
